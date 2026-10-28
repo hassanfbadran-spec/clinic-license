@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مولّد تفعيل تذاكر العيادة</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#F4F8FB; color:#1B2A38; margin:0; padding:16px; line-height:1.7; }
+  .box { background:#fff; border:1px solid #D5E0EA; border-radius:12px; padding:14px; margin:0 auto 14px; max-width:640px; }
+  h1 { font-size:20px; color:#0D47A1; text-align:center; margin:8px 0 14px; }
+  h2 { font-size:17px; color:#0D47A1; margin:0 0 8px; }
+  textarea, input { width:100%; box-sizing:border-box; font-size:15px; padding:8px; border:1px solid #B8C7D6; border-radius:8px; direction:ltr; text-align:left; font-family:monospace; }
+  textarea { height:90px; }
+  button { background:#1565C0; color:#fff; border:0; border-radius:10px; font-size:16px; padding:10px 16px; margin:6px 4px 6px 0; }
+  button.g { background:#2E7D32; } button.s { background:#607D8B; }
+  .warn { background:#FFF3E0; border:1px solid #F2B56B; border-radius:8px; padding:8px; font-size:14px; }
+  .err { color:#C62828; font-weight:bold; }
+  label { font-weight:bold; display:block; margin-top:8px; }
+</style>
+</head>
+<body>
+<h1>مولّد تفعيل تذاكر العيادة</h1>
+
+<div class="box">
+  <h2>1) إنشاء المفاتيح (مرة واحدة فقط)</h2>
+  <div class="warn">اضغط الزر مرة واحدة فقط. <b>المفتاح الخاص</b> احفظه في مكان آمن ولا ترسله لأي أحد، وإذا ضاع لن تستطيع تفعيل أجهزة جديدة. <b>المفتاح العام</b> هو الذي ترسله لمطوّر البرنامج.</div>
+  <button onclick="doGen()">إنشاء مفاتيح جديدة</button>
+  <label>المفتاح الخاص (سري)</label>
+  <textarea id="gpriv" readonly></textarea>
+  <button class="s" onclick="copyEl('gpriv')">نسخ المفتاح الخاص</button>
+  <label>المفتاح العام (يُرسل للمطوّر)</label>
+  <textarea id="gpub" readonly></textarea>
+  <button class="g" onclick="copyEl('gpub')">نسخ المفتاح العام</button>
+  <div id="gerr" class="err"></div>
+</div>
+
+<div class="box">
+  <h2>2) توليد كود تفعيل لجهاز</h2>
+  <label>المفتاح الخاص</label>
+  <textarea id="priv" placeholder="الصق المفتاح الخاص هنا"></textarea>
+  <label>كود الجهاز (يظهر في شاشة التفعيل بالبرنامج)</label>
+  <input id="dev" placeholder="XXXX-XXXX-XXXX-XXXX">
+  <button onclick="doSign()">توليد كود التفعيل</button>
+  <label>كود التفعيل</label>
+  <textarea id="out" readonly></textarea>
+  <button class="g" onclick="copyEl('out')">نسخ كود التفعيل</button>
+  <div id="serr" class="err"></div>
+</div>
+
+<script>
+const enc = new TextEncoder();
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const ALG = { name: "ECDSA", namedCurve: "P-256" };
+
+async function genKeys() {
+  const kp = await crypto.subtle.generateKey(ALG, true, ["sign", "verify"]);
+  return {
+    priv: b64(await crypto.subtle.exportKey("pkcs8", kp.privateKey)),
+    pub: b64(await crypto.subtle.exportKey("spki", kp.publicKey))
+  };
+}
+
+function normDevice(code) {
+  const c = code.toUpperCase().replace(/[^0-9A-F]/g, "");
+  if (c.length !== 16) throw new Error("كود الجهاز غير صحيح (يجب أن يكون 16 حرفاً/رقماً)");
+  return c;
+}
+
+async function makeCode(privB64, deviceCode) {
+  const clean = privB64.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  let key;
+  try {
+    key = await crypto.subtle.importKey("pkcs8", unb64(clean), ALG, false, ["sign"]);
+  } catch (e) {
+    throw new Error("المفتاح الخاص غير صحيح");
+  }
+  const msg = enc.encode(normDevice(deviceCode));
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, msg));
+  const hex = [...sig].map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+  return hex.match(/.{8}/g).join("-");
+}
+// ---- UI ----
+const $ = id => document.getElementById(id);
+async function doGen() {
+  $("gerr").textContent = "";
+  try {
+    const k = await genKeys();
+    $("gpriv").value = k.priv;
+    $("gpub").value = k.pub;
+  } catch (e) { $("gerr").textContent = "تعذر إنشاء المفاتيح: " + e.message; }
+}
+async function doSign() {
+  $("serr").textContent = ""; $("out").value = "";
+  try { $("out").value = await makeCode($("priv").value, $("dev").value); }
+  catch (e) { $("serr").textContent = e.message; }
+}
+function copyEl(id) {
+  const el = $(id);
+  el.select(); el.setSelectionRange(0, 99999);
+  if (navigator.clipboard) navigator.clipboard.writeText(el.value).catch(() => document.execCommand("copy"));
+  else document.execCommand("copy");
+}
+</script>
+</body>
+</html>
