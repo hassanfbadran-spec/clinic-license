@@ -38,7 +38,13 @@
   <h2>2) توليد كود تفعيل لجهاز</h2>
   <label>المفتاح الخاص</label>
   <textarea id="priv" placeholder="الصق المفتاح الخاص هنا"></textarea>
-  <label>كود الجهاز (يظهر في شاشة التفعيل بالبرنامج)</label>
+  <label>نوع الكود</label>
+  <select id="kind" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid #B8C7D6">
+    <option value="">تفعيل البرنامج</option>
+    <option value="SUP:">فتح تعديل بيانات الدعم الفني</option>
+    <option value="PIN:">إعادة تعيين رمز الحماية</option>
+  </select>
+  <label>كود الجهاز (يظهر في شاشة التفعيل أو في صفحة الدعم الفني بالبرنامج)</label>
   <input id="dev" placeholder="XXXX-XXXX-XXXX-XXXX">
   <button onclick="doSign()">توليد كود التفعيل</button>
   <label>كود التفعيل</label>
@@ -67,7 +73,7 @@ function normDevice(code) {
   return c;
 }
 
-async function makeCode(privB64, deviceCode) {
+async function makeCode(privB64, deviceCode, prefix) {
   const clean = privB64.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
   let key;
   try {
@@ -75,7 +81,7 @@ async function makeCode(privB64, deviceCode) {
   } catch (e) {
     throw new Error("المفتاح الخاص غير صحيح");
   }
-  const msg = enc.encode(normDevice(deviceCode));
+  const msg = enc.encode((prefix || "") + normDevice(deviceCode));
   const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, msg));
   const hex = [...sig].map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
   return hex.match(/.{8}/g).join("-");
@@ -92,7 +98,7 @@ async function doGen() {
 }
 async function doSign() {
   $("serr").textContent = ""; $("out").value = "";
-  try { $("out").value = await makeCode($("priv").value, $("dev").value); }
+  try { $("out").value = await makeCode($("priv").value, $("dev").value, $("kind").value); }
   catch (e) { $("serr").textContent = e.message; }
 }
 function copyEl(id) {
