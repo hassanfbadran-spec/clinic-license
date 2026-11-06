@@ -38,6 +38,7 @@
   <h2>2) توليد كود تفعيل لجهاز</h2>
   <label>المفتاح الخاص</label>
   <textarea id="priv" placeholder="الصق المفتاح الخاص هنا"></textarea>
+  <label style="font-weight:normal"><input type="checkbox" id="remember" style="width:auto" onchange="toggleRemember()"> تذكّر المفتاح الخاص على هذا الجهاز (لا تفعله على جهاز مشترك)</label>
   <label>نوع الكود</label>
   <select id="kind" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid #B8C7D6">
     <option value="">تفعيل البرنامج</option>
@@ -45,10 +46,12 @@
   </select>
   <label>كود الجهاز (يظهر في شاشة التفعيل، أو في صفحة تواصل معنا داخل الإعدادات)</label>
   <input id="dev" placeholder="XXXX-XXXX-XXXX-XXXX">
+  <button class="s" onclick="pasteDev()">لصق كود الجهاز من الحافظة</button>
   <button onclick="doSign()">توليد كود التفعيل</button>
   <label>كود التفعيل</label>
   <textarea id="out" readonly></textarea>
   <button class="g" onclick="copyEl('out')">نسخ كود التفعيل</button>
+  <button onclick="shareCode()">مشاركة الكود (واتساب وغيره)</button>
   <div id="serr" class="err"></div>
 </div>
 
@@ -97,9 +100,34 @@ async function doGen() {
 }
 async function doSign() {
   $("serr").textContent = ""; $("out").value = "";
-  try { $("out").value = await makeCode($("priv").value, $("dev").value, $("kind").value); }
+  try { toggleRemember(); $("out").value = await makeCode($("priv").value, $("dev").value, $("kind").value); }
   catch (e) { $("serr").textContent = e.message; }
 }
+function pasteDev() {
+  if (!navigator.clipboard || !navigator.clipboard.readText) { $("serr").textContent = "المتصفح لا يدعم اللصق التلقائي، الصق يدوياً"; return; }
+  navigator.clipboard.readText().then(function (t) { $("dev").value = t; $("serr").textContent = ""; })
+    .catch(function () { $("serr").textContent = "تعذر قراءة الحافظة، الصق يدوياً"; });
+}
+function shareCode() {
+  var code = $("out").value;
+  if (!code) { $("serr").textContent = "ولّد كود التفعيل أولاً"; return; }
+  var text = "كود التفعيل:\n" + code;
+  if (navigator.share) { navigator.share({ text: text }).catch(function () {}); }
+  else { window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank"); }
+}
+function toggleRemember() {
+  try {
+    if ($("remember").checked) localStorage.setItem("ck_priv", $("priv").value);
+    else localStorage.removeItem("ck_priv");
+  } catch (e) {}
+}
+function loadSaved() {
+  try {
+    var k = localStorage.getItem("ck_priv");
+    if (k) { $("priv").value = k; $("remember").checked = true; }
+  } catch (e) {}
+}
+loadSaved();
 function copyEl(id) {
   const el = $(id);
   el.select(); el.setSelectionRange(0, 99999);
